@@ -69,7 +69,8 @@ COMMON_GLOBAL_CFLAGS += -DFORCE_SCREENSHOT_CPU_PATH
 TARGET_HAS_WAITFORVSYNC := true
 
 # device-specific extensions to the updater binary
-TARGET_RECOVERY_UPDATER_LIBS += librecovery_updater_tuna
+# inexplicable build errors with Lollipop...
+#TARGET_RECOVERY_UPDATER_LIBS += librecovery_updater_tuna
 TARGET_RELEASETOOLS_EXTENSIONS := $(DEVICE_FOLDER)
 
 # Filesystem
