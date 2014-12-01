@@ -270,7 +270,4 @@
     <!-- Enable WiFi display support -->
     <bool name="config_enableWifiDisplay">true</bool>
 
-    <!-- CyanogenMod Performance profiles -->
-    <string name="config_perf_profile_prop">sys.perf.profile</string>
-
 </resources>
