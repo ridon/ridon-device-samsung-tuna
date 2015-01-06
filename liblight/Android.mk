@@ -19,13 +19,14 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := lights.c
 
-LOCAL_C_INCLUDES := kernel/samsung/tuna/include 
-
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
 
 LOCAL_SHARED_LIBRARIES := liblog
 
 LOCAL_MODULE := lights.tuna
+
+# Include kernel-headers
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/../kernel-headers
 
 LOCAL_MODULE_TAGS := optional
 
