@@ -217,7 +217,7 @@
 /* minimum sleep time in out_write() when write threshold is not reached */
 #define MIN_WRITE_SLEEP_US 5000
 
-#define DEFAULT_OUT_SAMPLING_RATE 44100 // 48000 is possible but interacts poorly with HDMI
+#define DEFAULT_OUT_SAMPLING_RATE 48000 // TODO: Check with HDMI.
 
 /* sampling rate when using MM low power port */
 #define MM_LOW_POWER_SAMPLING_RATE 44100
@@ -679,8 +679,10 @@ struct tuna_stream_out {
     pthread_mutex_t lock;       /* see note below on mutex acquisition order */
     struct pcm_config config[PCM_TOTAL];
     struct pcm *pcm[PCM_TOTAL];
+#ifdef OUT_RESAMPLER
     struct resampler_itfe *resampler;
     char *buffer;
+#endif
     size_t buffer_frames;
     int standby;
     struct echo_reference_itfe *echo_reference;
@@ -1438,12 +1440,16 @@ static int start_output_stream_low_latency(struct tuna_stream_out *out)
 
     if (success) {
         out->buffer_frames = pcm_config_tones.period_size * 2;
+#ifdef OUT_RESAMPLER
         if (out->buffer == NULL)
             out->buffer = malloc(out->buffer_frames * audio_stream_frame_size(&out->stream.common));
+#endif
 
         if (adev->echo_reference != NULL)
             out->echo_reference = adev->echo_reference;
+#ifdef OUT_RESAMPLER
         out->resampler->reset(out->resampler);
+#endif
 
         return 0;
     }
@@ -1474,8 +1480,10 @@ static int start_output_stream_deep_buffer(struct tuna_stream_out *out)
         return -ENOMEM;
     }
     out->buffer_frames = DEEP_BUFFER_SHORT_PERIOD_SIZE * 2;
+#ifdef OUT_RESAMPLER
     if (out->buffer == NULL)
         out->buffer = malloc(out->buffer_frames * audio_stream_frame_size(&out->stream.common));
+#endif
 
     return 0;
 }
@@ -1963,6 +1971,7 @@ static ssize_t out_write_low_latency(struct audio_stream_out *stream, const void
     }
     pthread_mutex_unlock(&adev->lock);
 
+#ifdef OUT_RESAMPLER
     for (i = 0; i < PCM_TOTAL; i++) {
         /* only use resampler if required */
         if (out->pcm[i] && (out->config[i].rate != DEFAULT_OUT_SAMPLING_RATE)) {
@@ -1975,6 +1984,7 @@ static ssize_t out_write_low_latency(struct audio_stream_out *stream, const void
             break;
         }
     }
+#endif
 
     if (out->echo_reference != NULL) {
         struct echo_reference_buffer b;
@@ -1988,13 +1998,17 @@ static ssize_t out_write_low_latency(struct audio_stream_out *stream, const void
     /* Write to all active PCMs */
     for (i = 0; i < PCM_TOTAL; i++) {
         if (out->pcm[i]) {
+#ifdef OUT_RESAMPLER
             if (out->config[i].rate == DEFAULT_OUT_SAMPLING_RATE) {
                 /* PCM uses native sample rate */
+#endif
                 ret = PCM_WRITE(out->pcm[i], (void *)buffer, bytes);
+#ifdef OUT_RESAMPLER
             } else {
                 /* PCM needs resampler */
                 ret = PCM_WRITE(out->pcm[i], (void *)out->buffer, out_frames * frame_size);
             }
+#endif
             if (ret)
                 break;
         }
@@ -2068,6 +2082,7 @@ static ssize_t out_write_deep_buffer(struct audio_stream_out *stream, const void
         out->use_long_periods = use_long_periods;
     }
 
+#ifdef OUT_RESAMPLER
     /* only use resampler if required */
     if (out->config[PCM_NORMAL].rate != DEFAULT_OUT_SAMPLING_RATE) {
         out_frames = out->buffer_frames;
@@ -2078,9 +2093,12 @@ static ssize_t out_write_deep_buffer(struct audio_stream_out *stream, const void
                                             &out_frames);
         buf = (void *)out->buffer;
     } else {
+#endif
         out_frames = in_frames;
         buf = (void *)buffer;
+#ifdef OUT_RESAMPLER
     }
+#endif
 
     /* do not allow more than out->write_threshold frames in kernel pcm driver buffer */
     do {
@@ -2493,8 +2511,9 @@ static int set_preprocessor_echo_delay(effect_handle_t handle,
 
     param->psize = sizeof(uint32_t);
     param->vsize = sizeof(uint32_t);
-    *(uint32_t *)param->data = AEC_PARAM_ECHO_DELAY;
-    *((int32_t *)param->data + 1) = delay_us;
+    uint32_t ed = AEC_PARAM_ECHO_DELAY;
+    memcpy(&param->data, &ed, sizeof(uint32_t));
+    memcpy((void*)(&param->data) + sizeof(int32_t), &delay_us, sizeof(int32_t));
 
     return set_preprocessor_param(handle, param);
 }
@@ -3227,7 +3246,8 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
                                    audio_devices_t devices,
                                    audio_output_flags_t flags,
                                    struct audio_config *config,
-                                   struct audio_stream_out **stream_out)
+                                   struct audio_stream_out **stream_out,
+                                   const char *address)
 {
     struct tuna_audio_device *ladev = (struct tuna_audio_device *)dev;
     struct tuna_stream_out *out;
@@ -3296,6 +3316,7 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
         out->stream.set_volume = out_set_volume;
     }
 
+#ifdef OUT_RESAMPLER
     ret = create_resampler(DEFAULT_OUT_SAMPLING_RATE,
                            MM_FULL_POWER_SAMPLING_RATE,
                            2,
@@ -3304,6 +3325,7 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
                            &out->resampler);
     if (ret != 0)
         goto err_open;
+#endif
 
     out->stream.common.set_sample_rate = out_set_sample_rate;
     out->stream.common.get_channels = out_get_channels;
@@ -3357,10 +3379,12 @@ static void adev_close_output_stream(struct audio_hw_device *dev,
         }
     }
 
+#ifdef OUT_RESAMPLER
     if (out->buffer)
         free(out->buffer);
     if (out->resampler)
         release_resampler(out->resampler);
+#endif
     free(stream);
 }
 
@@ -3494,7 +3518,10 @@ static int adev_open_input_stream(struct audio_hw_device *dev,
                                   audio_io_handle_t handle,
                                   audio_devices_t devices,
                                   struct audio_config *config,
-                                  struct audio_stream_in **stream_in)
+                                  struct audio_stream_in **stream_in,
+                                  audio_input_flags_t flags,
+                                  const char *address,
+                                  audio_source_t source)
 {
     struct tuna_audio_device *ladev = (struct tuna_audio_device *)dev;
     struct tuna_stream_in *in;

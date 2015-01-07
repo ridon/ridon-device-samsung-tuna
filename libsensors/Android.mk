@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 LOCAL_PATH := $(call my-dir)
 
 # HAL module implemenation stored in
@@ -37,5 +36,6 @@ LOCAL_SRC_FILES := \
 	TemperatureSensor.cpp
 
 LOCAL_SHARED_LIBRARIES := libinvensense_hal liblog libcutils libutils libdl
+LOCAL_CLANG := true
 
 include $(BUILD_SHARED_LIBRARY)
