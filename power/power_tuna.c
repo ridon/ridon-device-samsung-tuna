@@ -25,10 +25,9 @@
 #include <hardware/hardware.h>
 #include <hardware/power.h>
 
-#define CPUFREQ_INTERACTIVE "/sys/devices/system/cpu/cpufreq/interactive/"
-#define CPUFREQ_CPU0 "/sys/devices/system/cpu/cpu0/cpufreq/"
-#define BOOSTPULSE_PATH (CPUFREQ_INTERACTIVE "boostpulse")
-#define SCALINGMAXFREQ_PATH (CPUFREQ_CPU0 "scaling_max_freq")
+#define SCALINGMAXFREQ_PATH "/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"
+#define SCREENOFFMAXFREQ_PATH "/sys/devices/system/cpu/cpu0/cpufreq/screen_off_max_freq"
+#define BOOSTPULSE_PATH "/sys/devices/system/cpu/cpufreq/interactive/boostpulse"
 
 #define MAX_BUF_SZ  10
 
@@ -41,7 +40,6 @@ struct tuna_power_module {
     pthread_mutex_t lock;
     int boostpulse_fd;
     int boostpulse_warned;
-    int inited;
 };
 
 static void sysfs_write(char *path, char *s)
@@ -52,14 +50,14 @@ static void sysfs_write(char *path, char *s)
 
     if (fd < 0) {
         strerror_r(errno, buf, sizeof(buf));
-        ALOGE("Error opening %s: %s\n", path, buf);
+        /*ALOGE("Error opening %s: %s\n", path, buf);*/
         return;
     }
 
     len = write(fd, s, strlen(s));
     if (len < 0) {
         strerror_r(errno, buf, sizeof(buf));
-        ALOGE("Error writing to %s: %s\n", path, buf);
+        /*ALOGE("Error writing to %s: %s\n", path, buf);*/
     }
 
     close(fd);
@@ -84,17 +82,18 @@ int sysfs_read(const char *path, char *buf, size_t size)
 
 static void tuna_power_init(struct power_module *module)
 {
-    struct tuna_power_module *tuna = (struct tuna_power_module *) module;
-
-    sysfs_write(CPUFREQ_INTERACTIVE "timer_rate", "20000");
-    sysfs_write(CPUFREQ_INTERACTIVE "min_sample_time", "60000");
-    sysfs_write(CPUFREQ_INTERACTIVE "hispeed_freq", "700000");
-    sysfs_write(CPUFREQ_INTERACTIVE "target_loads", "70 920000:80 1200000:99");
-    sysfs_write(CPUFREQ_INTERACTIVE "go_hispeed_load", "99");
-    sysfs_write(CPUFREQ_INTERACTIVE "above_hispeed_delay", "80000");
-
-    ALOGI("Initialized successfully");
-    tuna->inited = 1;
+    sysfs_write("/sys/devices/system/cpu/cpufreq/interactive/timer_rate",
+                "20000");
+    sysfs_write("/sys/devices/system/cpu/cpufreq/interactive/min_sample_time",
+                "60000");
+    sysfs_write("/sys/devices/system/cpu/cpufreq/interactive/hispeed_freq",
+                "700000");
+    sysfs_write("/sys/devices/system/cpu/cpufreq/interactive/target_loads",
+                "70 920000:75 1200000:85");
+    sysfs_write("/sys/devices/system/cpu/cpufreq/interactive/go_hispeed_load",
+                "99");
+    sysfs_write("/sys/devices/system/cpu/cpufreq/interactive/above_hispeed_delay",
+                "80000");
 }
 
 static int boostpulse_open(struct tuna_power_module *tuna)
@@ -109,7 +108,7 @@ static int boostpulse_open(struct tuna_power_module *tuna)
         if (tuna->boostpulse_fd < 0) {
             if (!tuna->boostpulse_warned) {
                 strerror_r(errno, buf, sizeof(buf));
-                ALOGE("Error opening %s: %s\n", BOOSTPULSE_PATH, buf);
+                /*ALOGE("Error opening %s: %s\n", BOOSTPULSE_PATH, buf);*/
                 tuna->boostpulse_warned = 1;
             }
         }
@@ -121,13 +120,9 @@ static int boostpulse_open(struct tuna_power_module *tuna)
 
 static void tuna_power_set_interactive(struct power_module *module, int on)
 {
-    struct tuna_power_module *tuna = (struct tuna_power_module *) module;
     int len;
-    char buf[MAX_BUF_SZ];
 
-    if (!tuna->inited) {
-        return;
-    }
+    char buf[MAX_BUF_SZ];
 
     /*
      * Lower maximum frequency when screen is off.  CPU 0 and 1 share a
@@ -157,20 +152,16 @@ static void tuna_power_hint(struct power_module *module, power_hint_t hint,
     char buf[80];
     int len;
 
-    if (!tuna->inited) {
-        return;
-    }
-
     switch (hint) {
     case POWER_HINT_INTERACTION:
         if (boostpulse_open(tuna) >= 0) {
-            len = write(tuna->boostpulse_fd, "1", strlen(buf));
+	    len = write(tuna->boostpulse_fd, "1", 1);
 
-            if (len < 0) {
-                strerror_r(errno, buf, sizeof(buf));
-                ALOGE("Error writing to %s: %s\n", BOOSTPULSE_PATH, buf);
-            }
-        }
+	    if (len < 0) {
+	        strerror_r(errno, buf, sizeof(buf));
+		/*ALOGE("Error writing to %s: %s\n", BOOSTPULSE_PATH, buf);*/
+	    }
+	}
         break;
 
     case POWER_HINT_VSYNC:
@@ -186,23 +177,23 @@ static struct hw_module_methods_t power_module_methods = {
 };
 
 struct tuna_power_module HAL_MODULE_INFO_SYM = {
-    .base = {
-        .common = {
-            .tag = HARDWARE_MODULE_TAG,
-            .module_api_version = POWER_MODULE_API_VERSION_0_2,
-            .hal_api_version = HARDWARE_HAL_API_VERSION,
-            .id = POWER_HARDWARE_MODULE_ID,
-            .name = "Tuna Power HAL",
-            .author = "The Android Open Source Project",
-            .methods = &power_module_methods,
+    base: {
+        common: {
+            tag: HARDWARE_MODULE_TAG,
+            module_api_version: POWER_MODULE_API_VERSION_0_2,
+            hal_api_version: HARDWARE_HAL_API_VERSION,
+            id: POWER_HARDWARE_MODULE_ID,
+            name: "Tuna Power HAL",
+            author: "The Android Open Source Project",
+            methods: &power_module_methods,
         },
 
-        .init = tuna_power_init,
-        .setInteractive = tuna_power_set_interactive,
-        .powerHint = tuna_power_hint,
+       init: tuna_power_init,
+       setInteractive: tuna_power_set_interactive,
+       powerHint: tuna_power_hint,
     },
 
-    .lock = PTHREAD_MUTEX_INITIALIZER,
-    .boostpulse_fd = -1,
-    .boostpulse_warned = 0,
+    lock: PTHREAD_MUTEX_INITIALIZER,
+    boostpulse_fd: -1,
+    boostpulse_warned: 0,
 };
