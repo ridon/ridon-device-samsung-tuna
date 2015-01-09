@@ -16,12 +16,6 @@
 
 DEVICE_FOLDER := device/samsung/tuna
 
-# Hardware tunables
-BOARD_HARDWARE_CLASS := $(DEVICE_FOLDER)/cmhw
-
-# This variable is set first, so it can be overridden
-# by BoardConfigVendor.mk
-USE_CAMERA_STUB := true
 WITH_DEXPREOPT := true
 
 PRODUCT_VENDOR_KERNEL_HEADERS := $(DEVICE_FOLDER)/kernel-headers
@@ -34,10 +28,6 @@ BOARD_USE_CUSTOM_LIBION := true
 # Use the non-open-source parts, if they're present
 -include vendor/samsung/tuna/BoardConfigVendor.mk
 
-TARGET_NO_BOOTLOADER := true
-TARGET_NO_RADIOIMAGE := true
-
-TARGET_BOARD_PLATFORM := omap4
 TARGET_BOOTLOADER_BOARD_NAME := tuna
 
 # Processor
@@ -99,8 +89,6 @@ OMAP_TUNA := true
 
 BOARD_CREATE_TUNA_HDCP_KEYS_SYMLINK := true
 
-# EGL
-BOARD_EGL_CFG := $(DEVICE_FOLDER)/prebuilt/lib/egl/egl.cfg
 USE_OPENGL_RENDERER := true
 
 BOARD_USE_TI_DUCATI_H264_PROFILE := true
